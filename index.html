@@ -23,20 +23,46 @@
   canvas.erase { cursor: default; }
   canvas.erase.hit { cursor: pointer; }
   canvas.panning, canvas.erase.panning { cursor: grabbing; }
-  #bar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  #bar { position: fixed; top: 12px; left: 0; right: 0; margin: 0 auto; width: fit-content;
+    display: flex; align-items: center; justify-content: center; gap: 2px; padding: 5px 6px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     box-shadow: 0 4px 18px rgba(0,0,0,.12); user-select: none; max-width: calc(100vw - 24px); flex-wrap: wrap; }
-  #bar button { font: inherit; color: var(--text); background: transparent; border: 1px solid transparent;
-    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-  #bar button:hover { background: rgba(127,127,127,.14); }
+  #bar button, #layers button { font: inherit; color: var(--text); background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 0; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer; flex: none; }
+  svg.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; display: block; }
+  #bar button:hover, #layers button:hover { background: rgba(127,127,127,.14); }
   #bar button.on { background: var(--accent); color: #fff; }
-  #bar button:disabled { opacity: .35; cursor: default; background: transparent; }
-  .sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
-  .sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--panel);
-    outline: 1px solid var(--border); cursor: pointer; padding: 0 !important; }
-  .sw.on { outline: 2px solid var(--accent); }
-  #width { width: 70px; accent-color: var(--accent); }
+  #bar button:disabled, #layers button:disabled { opacity: .3; cursor: default; background: transparent; }
+  .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; flex: none; }
+  #swatches { display: flex; gap: 4px; flex-wrap: wrap; max-width: 260px; margin: 0 2px; }
+  #bar .sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--panel);
+    outline: 1px solid var(--border); }
+  #bar .sw.on { outline: 2px solid var(--accent); }
+  #width { width: 56px; accent-color: var(--accent); margin: 0 4px; }
+
+  /* layers panel */
+  #layers { position: fixed; left: 12px; top: 100px; width: 232px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,.12); user-select: none; }
+  #layers.min { width: auto; }
+  #layers.min #layerBody { display: none; }
+  #layersHead { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; font-weight: 600; }
+  #layersHead .grow { flex: 1; }
+  #layers button { width: 26px; height: 26px; border-radius: 6px; }
+  #layers svg.ic { width: 16px; height: 16px; }
+  #layerList { max-height: min(46vh, 340px); overflow-y: auto; padding: 2px 6px; display: grid; gap: 2px; }
+  .layer { display: flex; align-items: center; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+  .layer:hover { background: rgba(127,127,127,.1); }
+  .layer.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .layer .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 2px; }
+  .layer.off .name { opacity: .45; }
+  .layer input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--accent); border-radius: 6px; padding: 3px 4px; }
+  .layer.dropAbove { box-shadow: 0 -2px 0 var(--accent); }
+  .layer.dropBelow { box-shadow: 0 2px 0 var(--accent); }
+  #layerFoot { padding: 4px 6px 6px; }
+  #layers #addLayer { width: 100%; display: flex; gap: 6px; justify-content: center; align-items: center;
+    border: 1px dashed var(--border); color: var(--muted); }
   #hud { position: fixed; left: 12px; bottom: 10px; color: var(--muted); pointer-events: none;
     font-variant-numeric: tabular-nums; }
   #help { position: fixed; right: 12px; bottom: 10px; color: var(--muted); pointer-events: none; text-align: right; }
@@ -46,7 +72,7 @@
     opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
   #palSel { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--border);
-    border-radius: 8px; padding: 5px 6px; max-width: 130px; cursor: pointer; }
+    border-radius: 8px; padding: 0 4px; height: 28px; max-width: 104px; cursor: pointer; }
   dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 14px;
     background: var(--panel); color: var(--text); padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
   dialog::backdrop { background: rgba(0,0,0,.35); }
@@ -69,27 +95,37 @@
 <body>
 <canvas id="c"></canvas>
 <div id="bar">
-  <button id="tLine" title="Straight line (L)">Line</button>
-  <button id="tFree" title="Freehand, ends snap (F)">Freehand</button>
-  <button id="tFill" title="Fill area: click points for the boundary, then click the first point again or press Enter (B)">Fill</button>
-  <button id="tErase" title="Eraser: click or drag over strokes to remove them (E)">Eraser</button>
-  <button id="tPick" title="Eyedropper: click a stroke or fill to take its colour (I)">Eyedropper</button>
+  <button id="tLine" data-icon="line" title="Line (L)"></button>
+  <button id="tFree" data-icon="free" title="Freehand; the two ends snap (F)"></button>
+  <button id="tFill" data-icon="fill" title="Fill area: click points for the boundary, then click the first point again or press Enter (B)"></button>
+  <button id="tErase" data-icon="eraser" title="Eraser: click or drag over strokes on the current layer (E)"></button>
+  <button id="tPick" data-icon="dropper" title="Eyedropper: click a stroke or fill to take its colour (I)"></button>
   <div class="sep"></div>
-  <span id="swatches" style="display:flex;gap:5px;flex-wrap:wrap;max-width:260px"></span>
+  <span id="swatches"></span>
   <select id="palSel" title="Colour palettes: switch, create, import, edit"></select>
   <input id="width" type="range" min="1" max="12" step="0.5" value="2.5" title="Line width">
   <div class="sep"></div>
-  <button id="undo" title="Undo (⌘Z)">Undo</button>
-  <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
-  <button id="clear" title="Clear everything (undoable)">Clear</button>
+  <button id="undo" data-icon="undo" title="Undo (⌘Z)"></button>
+  <button id="redo" data-icon="redo" title="Redo (⇧⌘Z)"></button>
+  <button id="clear" data-icon="trash" title="Clear every layer (undoable)"></button>
   <div class="sep"></div>
-  <button id="grid" title="Show / hide grid points (G)">Grid</button>
-  <button id="theme" title="Switch between light and dark mode (D)">Dark</button>
-  <button id="home" title="Reset view (0)">Reset view</button>
+  <button id="grid" data-icon="grid" title="Show / hide grid points (G)"></button>
+  <button id="theme" data-icon="moon" title="Dark mode on / off (D)"></button>
+  <button id="home" data-icon="target" title="Reset view (0)"></button>
   <div class="sep"></div>
-  <button id="save" title="Save drawing to a file (⌘S)">Save</button>
-  <button id="import" title="Import a saved drawing; replaces the current one, undoable (⌘O)">Import</button>
+  <button id="save" data-icon="save" title="Save drawing to a file (⌘S)"></button>
+  <button id="import" data-icon="open" title="Import a saved drawing; replaces the current one, undoable (⌘O)"></button>
   <input id="file" type="file" accept=".json,application/json" hidden>
+</div>
+<div id="layers">
+  <div id="layersHead">
+    <span data-icon="layers"></span><span class="grow">Layers</span>
+    <button id="layersMin"></button>
+  </div>
+  <div id="layerBody">
+    <div id="layerList"></div>
+    <div id="layerFoot"><button id="addLayer" title="Add a new layer above the current one"></button></div>
+  </div>
 </div>
 <div id="hud"></div>
 <div id="toast"></div>
@@ -159,7 +195,9 @@
   // ---------- state ----------
   const COLORS = ['ink', '#e5484d', '#f2992e', '#2fa36b', '#2f6fde', '#8e4ec6'];
   let tool = 'line', color = 'ink', width = 2.5;
-  let strokes = [];                  // {tool, color, w, pts:[[x,y],...]} in world coords
+  let strokes = [];                  // {tool, color, w, layer, pts:[[x,y],...]} in world coords
+  let layers = [{ id: 1, name: 'Layer 1', visible: true }];   // bottom → top
+  let activeLayer = 1;               // id of the layer new strokes go on
   let undoStack = [], redoStack = [];
   let draft = null;                  // stroke being drawn
   let hover = null;                  // snapped world point under cursor
@@ -179,14 +217,30 @@
 
   const KEY = 'iso-draw-v1';
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ strokes, scale, camX, camY, showGrid })); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify({ strokes, layers, activeLayer, scale, camX, camY, showGrid })); } catch (e) {}
   }
   function load() {
     try {
       const d = JSON.parse(localStorage.getItem(KEY));
-      if (d && Array.isArray(d.strokes)) { strokes = d.strokes; scale = d.scale; camX = d.camX; camY = d.camY; showGrid = d.showGrid !== false; return true; }
+      if (d && Array.isArray(d.strokes)) {
+        strokes = d.strokes;
+        ({ layers, active: activeLayer } = normalizeDoc(d.layers, strokes, d.activeLayer));
+        scale = d.scale; camX = d.camX; camY = d.camY; showGrid = d.showGrid !== false; return true; }
     } catch (e) {}
     return false;
+  }
+  // Make a layer list trustworthy and give every stroke a layer that exists.
+  // Drawings saved before layers existed end up on a single "Layer 1".
+  function normalizeDoc(rawLayers, list, active) {
+    const ls = [];
+    for (const l of Array.isArray(rawLayers) ? rawLayers : []) {
+      if (l && Number.isInteger(l.id) && !ls.some(x => x.id === l.id)) {
+        ls.push({ id: l.id, name: String(l.name || `Layer ${l.id}`).slice(0, 40), visible: l.visible !== false });
+      }
+    }
+    if (!ls.length) ls.push({ id: 1, name: 'Layer 1', visible: true });
+    for (const st of list) if (!ls.some(l => l.id === st.layer)) st.layer = ls[0].id;
+    return { layers: ls, active: ls.some(l => l.id === active) ? active : ls[ls.length - 1].id };
   }
   function homeView() { scale = 1; camX = -W / 2; camY = -H / 2; }
 
@@ -195,6 +249,7 @@
   function redraw() { if (!queued) { queued = true; requestAnimationFrame(draw); } }
 
   function resize() {
+    placeLayers();
     dpr = window.devicePixelRatio || 1;
     W = innerWidth; H = innerHeight;
     canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
@@ -271,23 +326,27 @@
     if (showGrid) paintGrid(grid, dark ? '255,255,255' : '40,36,28', 1);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-    // Layer order: fills, then grid dots re-drawn on top of each fill in a
-    // contrasting colour (so they show through), then lines above everything.
-    for (const st of strokes) {
-      if (st.tool !== 'fill') continue;
-      const path = polyPath(st.pts);
-      ctx.fillStyle = inkColor(st.color); ctx.fill(path);
-      if (showGrid) { ctx.save(); ctx.clip(path); paintGrid(grid, dotRgbOn(st.color), 1.6); ctx.restore(); }
+    // Layers are painted bottom to top. Inside a layer: fills first, with the
+    // grid dots re-drawn on each fill in a contrasting colour (so they show
+    // through), then that layer's lines.
+    for (const layer of layers) {
+      if (!layer.visible) continue;
+      for (const st of strokes) {
+        if (st.layer !== layer.id || st.tool !== 'fill') continue;
+        const path = polyPath(st.pts);
+        ctx.fillStyle = inkColor(st.color); ctx.fill(path);
+        if (showGrid) { ctx.save(); ctx.clip(path); paintGrid(grid, dotRgbOn(st.color), 1.6); ctx.restore(); }
+      }
+      if (fillDraft && fillDraft.layer === layer.id) {
+        const pts = hover ? [...fillDraft.pts, hover] : fillDraft.pts;
+        const path = polyPath(pts);
+        ctx.globalAlpha = 0.4; ctx.fillStyle = inkColor(fillDraft.color); ctx.fill(path);
+        ctx.globalAlpha = 1; ctx.strokeStyle = inkColor(fillDraft.color); ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]); ctx.stroke(path); ctx.setLineDash([]);
+      }
+      for (const st of strokes) if (st.layer === layer.id && st.tool !== 'fill') drawStroke(st);
+      if (draft && draft.layer === layer.id) drawStroke(draft);
     }
-    if (fillDraft) {
-      const pts = hover ? [...fillDraft.pts, hover] : fillDraft.pts;
-      const path = polyPath(pts);
-      ctx.globalAlpha = 0.4; ctx.fillStyle = inkColor(fillDraft.color); ctx.fill(path);
-      ctx.globalAlpha = 1; ctx.strokeStyle = inkColor(fillDraft.color); ctx.lineWidth = 1.5;
-      ctx.setLineDash([5, 4]); ctx.stroke(path); ctx.setLineDash([]);
-    }
-    for (const st of strokes) if (st.tool !== 'fill') drawStroke(st);
-    if (draft) drawStroke(draft);
     if (eraseTarget && eraseTarget.tool === 'fill') {
       const path = polyPath(eraseTarget.pts);
       ctx.fillStyle = 'rgba(229,72,77,0.55)'; ctx.fill(path);
@@ -317,7 +376,7 @@
 
     const z = scale >= 1 ? scale : 1 / scale;
     const zs = (z >= 100 ? Math.round(z).toLocaleString() : z.toPrecision(3)) + '×';
-    hud.textContent = `zoom ${scale >= 1 ? zs : '1/' + zs} · grid 2^${Math.log2(spacing())} · ${strokes.length} stroke${strokes.length === 1 ? '' : 's'}`;
+    hud.textContent = `zoom ${scale >= 1 ? zs : '1/' + zs} · grid 2^${Math.log2(spacing())} · ${strokes.length} stroke${strokes.length === 1 ? '' : 's'} · ${(layers.find(l => l.id === activeLayer) || {}).name}`;
   }
 
   // ---------- history ----------
@@ -331,17 +390,35 @@
     const a = undoStack.pop(); if (!a) return;
     if (a.type === 'add') strokes.pop();
     else if (a.type === 'remove') strokes.splice(a.index, 0, a.stroke);
-    else strokes = a.prev;
-    eraseTarget = null;
-    redoStack.push(a); syncUI(); save(); redraw();
+    else applyState(a.prev);
+    setEraseTarget(null);
+    redoStack.push(a); syncUI(); renderLayers(); save(); redraw();
   }
   function redo() {
     const a = redoStack.pop(); if (!a) return;
     if (a.type === 'add') strokes.push(a.stroke);
     else if (a.type === 'remove') strokes.splice(a.index, 1);
-    else strokes = a.next || [];                 // 'clear' has no next; 'replace' (import) does
-    eraseTarget = null;
-    undoStack.push(a); syncUI(); save(); redraw();
+    else applyState(a.next);
+    setEraseTarget(null);
+    undoStack.push(a); syncUI(); renderLayers(); save(); redraw();
+  }
+
+  // Anything that changes layers (or many strokes at once) is recorded as a
+  // before/after snapshot. Stroke objects are never modified after they are
+  // drawn, so copying the arrays is enough.
+  function snapshot() {
+    return { strokes: strokes.slice(), layers: layers.map(l => ({ ...l })), active: activeLayer };
+  }
+  function applyState(st) {
+    strokes = st.strokes.slice(); layers = st.layers.map(l => ({ ...l })); activeLayer = st.active;
+    draft = null; fillDraft = null; hover = null; pickTarget = null;
+  }
+  function layerOp(change) {
+    const prev = snapshot();
+    change();
+    draft = null; fillDraft = null; setEraseTarget(null);
+    commit({ type: 'state', prev, next: snapshot() });
+    renderLayers();
   }
 
   // ---------- save / import ----------
@@ -352,7 +429,7 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
   }
   function exportFile() {
-    const data = { app: 'iso-draw', version: 1, view: { scale, camX, camY }, showGrid, strokes };
+    const data = { app: 'iso-draw', version: 2, view: { scale, camX, camY }, showGrid, layers, activeLayer, strokes };
     const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url; a.download = `iso-draw-${new Date().toISOString().slice(0, 10)}.json`;
@@ -370,7 +447,7 @@
       if (pts.length < (s.tool === 'fill' ? 3 : 2)) continue;
       const col = s.color === 'ink' || /^#[0-9a-f]{6}$/i.test(s.color) ? s.color : 'ink';
       const w = Number.isFinite(s.w) ? Math.min(40, Math.max(0.5, s.w)) : 2.5;
-      ok.push({ tool: s.tool, color: col, w, pts });
+      ok.push({ tool: s.tool, color: col, w, layer: s.layer, pts });
     }
     return ok;
   }
@@ -380,53 +457,67 @@
     try { data = JSON.parse(await file.text()); } catch (e) {}
     const next = data && data.app === 'iso-draw' ? cleanStrokes(data.strokes) : null;
     if (!next) { toast(`Couldn't import "${file.name}": it isn't a saved Iso Draw drawing.`); return; }
-    const prev = strokes;
+    const prev = snapshot();
     strokes = next; draft = null; fillDraft = null; hover = null; setEraseTarget(null);
+    ({ layers, active: activeLayer } = normalizeDoc(data.layers, strokes, data.activeLayer));
     const v = data.view;
     if (v && [v.scale, v.camX, v.camY].every(Number.isFinite) && v.scale > 0) {
       scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale)); camX = v.camX; camY = v.camY;
     } else homeView();
     if (typeof data.showGrid === 'boolean') showGrid = data.showGrid;
-    commit({ type: 'replace', prev, next });
+    commit({ type: 'state', prev, next: snapshot() });
+    renderLayers();
     const skipped = data.strokes.length - next.length;
-    toast(`Imported ${next.length} stroke${next.length === 1 ? '' : 's'} from "${file.name}"` +
+    toast(`Imported ${next.length} stroke${next.length === 1 ? '' : 's'} on ${layers.length} layer${layers.length === 1 ? '' : 's'} from "${file.name}"` +
           (skipped ? ` (${skipped} unreadable skipped)` : '') + '. Undo brings back the previous drawing.');
   }
 
   // ---------- eraser ----------
-  // Topmost stroke within a few screen pixels of (sx, sy), or null.
-  function strokeAt(sx, sy) {
-    // Lines are drawn above fills, so they get first pick.
-    for (let n = strokes.length - 1; n >= 0; n--) {
-      const st = strokes[n], p = st.pts, tol = st.w / 2 + 6;
-      if (st.tool === 'fill') continue;
-      let [ax, ay] = toScreen(p[0][0], p[0][1]);
-      for (let k = 1; k < p.length; k++) {
-        const [bx, by] = toScreen(p[k][0], p[k][1]);
-        const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-        const t = len2 ? Math.max(0, Math.min(1, ((sx - ax) * dx + (sy - ay) * dy) / len2)) : 0;
-        if (Math.hypot(sx - ax - t * dx, sy - ay - t * dy) <= tol) return st;
-        ax = bx; ay = by;
-      }
-    }
+  // Topmost stroke within a few screen pixels of (sx, sy), or null. Looks through
+  // visible layers from the top down; pass onlyLayer to look at just one layer.
+  function strokeAt(sx, sy, onlyLayer) {
     const [wx, wy] = toWorld(sx, sy);
-    for (let n = strokes.length - 1; n >= 0; n--) {
-      const st = strokes[n], p = st.pts;
-      if (st.tool !== 'fill') continue;
-      let inside = false;
-      for (let k = 0, j = p.length - 1; k < p.length; j = k++) {
-        if ((p[k][1] > wy) !== (p[j][1] > wy) &&
-            wx < (p[j][0] - p[k][0]) * (wy - p[k][1]) / (p[j][1] - p[k][1]) + p[k][0]) inside = !inside;
+    for (let li = layers.length - 1; li >= 0; li--) {
+      const layer = layers[li];
+      if (!layer.visible || (onlyLayer != null && layer.id !== onlyLayer)) continue;
+      // Within a layer, lines are drawn above fills, so they get first pick.
+      for (let n = strokes.length - 1; n >= 0; n--) {
+        const st = strokes[n], p = st.pts, tol = st.w / 2 + 6;
+        if (st.layer !== layer.id || st.tool === 'fill') continue;
+        let [ax, ay] = toScreen(p[0][0], p[0][1]);
+        for (let k = 1; k < p.length; k++) {
+          const [bx, by] = toScreen(p[k][0], p[k][1]);
+          const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, ((sx - ax) * dx + (sy - ay) * dy) / len2)) : 0;
+          if (Math.hypot(sx - ax - t * dx, sy - ay - t * dy) <= tol) return st;
+          ax = bx; ay = by;
+        }
       }
-      if (inside) return st;
+      for (let n = strokes.length - 1; n >= 0; n--) {
+        const st = strokes[n], p = st.pts;
+        if (st.layer !== layer.id || st.tool !== 'fill') continue;
+        let inside = false;
+        for (let k = 0, j = p.length - 1; k < p.length; j = k++) {
+          if ((p[k][1] > wy) !== (p[j][1] > wy) &&
+              wx < (p[j][0] - p[k][0]) * (wy - p[k][1]) / (p[j][1] - p[k][1]) + p[k][0]) inside = !inside;
+        }
+        if (inside) return st;
+      }
     }
     return null;
+  }
+  // Drawing needs a visible layer to land on.
+  function canDraw() {
+    const l = layers.find(x => x.id === activeLayer);
+    if (l.visible) return true;
+    toast(`"${l.name}" is hidden. Show it, or pick another layer, to draw.`);
+    return false;
   }
 
   // ---------- fill ----------
   const samePt = (a, b) => a[0] === b[0] && a[1] === b[1];
   function fillClick(pt) {
-    if (!fillDraft) { fillDraft = { tool: 'fill', color, pts: [pt] }; syncUI(); return; }
+    if (!fillDraft) { fillDraft = { tool: 'fill', color, layer: activeLayer, pts: [pt] }; syncUI(); return; }
     const p = fillDraft.pts;
     if (samePt(pt, p[0]) || samePt(pt, p[p.length - 1])) { if (p.length >= 3) finishFill(); }
     else p.push(pt);
@@ -441,7 +532,7 @@
     canvas.classList.toggle('hit', !!st);
   }
   function eraseAt(sx, sy) {
-    const st = strokeAt(sx, sy);
+    const st = strokeAt(sx, sy, activeLayer);            // the eraser only touches the current layer
     setEraseTarget(null);
     if (!st) return;
     const index = strokes.indexOf(st);
@@ -476,13 +567,15 @@
       const st = strokeAt(e.clientX, e.clientY);
       if (st) { color = st.color; setTool(prevTool); renderPalettes(); }
       else toast('Click on a line or a filled area to pick up its colour.');
+    } else if (e.button === 0 && !canDraw()) {
+      // hidden layer: nothing to do, canDraw() already explained why
     } else if (e.button === 0 && tool === 'fill') {
       hover = snap(...toWorld(e.clientX, e.clientY));
       fillClick(hover);
     } else if (e.button === 0) {
       mode = 'draw';
       const start = snap(...toWorld(e.clientX, e.clientY));
-      draft = { tool, color, w: width, pts: [start, start] };
+      draft = { tool, color, w: width, layer: activeLayer, pts: [start, start] };
     }
     redraw();
   });
@@ -509,7 +602,7 @@
     } else if (mode === 'erase') {
       eraseAt(e.clientX, e.clientY);
     } else if (!mode) {
-      if (tool === 'erase') setEraseTarget(spaceDown ? null : strokeAt(e.clientX, e.clientY));
+      if (tool === 'erase') setEraseTarget(spaceDown ? null : strokeAt(e.clientX, e.clientY, activeLayer));
       else if (tool === 'pick') { cursor = [e.clientX, e.clientY]; pickTarget = spaceDown ? null : strokeAt(e.clientX, e.clientY); }
       else hover = spaceDown ? null : snap(w[0], w[1]);
     }
@@ -542,7 +635,7 @@
     zoomAt(e.clientX, e.clientY, Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0025)));
     const w = toWorld(e.clientX, e.clientY);
     if (mode === 'draw' && draft && draft.tool === 'line') { hover = snap(w[0], w[1]); draft.pts[1] = hover; }
-    else if (!mode && tool === 'erase') setEraseTarget(strokeAt(e.clientX, e.clientY));
+    else if (!mode && tool === 'erase') setEraseTarget(strokeAt(e.clientX, e.clientY, activeLayer));
     else if (!mode && tool === 'pick') { cursor = [e.clientX, e.clientY]; pickTarget = strokeAt(e.clientX, e.clientY); }
     else if (!mode) hover = snap(w[0], w[1]);
     clearTimeout(saveTimer); saveTimer = setTimeout(save, 300);
@@ -574,6 +667,35 @@
 
   // ---------- toolbar ----------
   const $ = id => document.getElementById(id);
+  const ICONS = {
+    line: '<path d="M6.5 17.5 17.5 6.5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/>',
+    free: '<path d="M3 17c3-9 6-9 8-3s5 4 10-7"/>',
+    fill: '<path d="M12 3.5 20.5 9l-3 10.5h-11L3.5 9Z" fill="currentColor" fill-opacity=".3"/>',
+    eraser: '<path d="M9 20h11M5.3 13.700l8-8a2 2 0 0 1 2.8 0l3.2 3.200a2 2 0 0 1 0 2.800L11 20H8.500l-3.2-3.200a2.2 2.2 0 0 1 0-3.100z"/><path d="m10 9 6 6"/>',
+    dropper: '<path d="m13.5 6.5 4 4"/><path d="M15 8l3.2-3.200a2.1 2.1 0 0 1 3 3L18 11"/><path d="m14.5 8.5-9 9L4 20l2.5-1.5 9-9"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+    redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    grid: '<g fill="currentColor" stroke="none"><circle cx="5" cy="6" r="1.7"/><circle cx="19" cy="6" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="5" cy="18" r="1.7"/><circle cx="19" cy="18" r="1.7"/></g>',
+    moon: '<path d="M20 14.500A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.500z"/>',
+    target: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+    save: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+    open: '<path d="M12 16V5M7 9l5-5 5 5M5 20h14"/>',
+    layers: '<path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5"/>',
+    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" opacity=".45"/><path d="M4 4l16 16"/>',
+    up: '<path d="m6 14 6-6 6 6"/>',
+    down: '<path d="m6 10 6 6 6-6"/>',
+    x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    collapse: '<path d="m14 6-6 6 6 6"/>',
+    expand: '<path d="m10 6 6 6-6 6"/>',
+  };
+  const svg = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+  document.querySelectorAll('[data-icon]').forEach(el => {
+    el.innerHTML = svg(el.dataset.icon);
+    if (el.title) el.setAttribute('aria-label', el.title);
+  });
   function setTool(t) {
     if (t === 'pick' && tool !== 'pick') prevTool = tool;
     tool = t; hover = null; fillDraft = null; pickTarget = null; setEraseTarget(null);
@@ -655,6 +777,7 @@
     opt('del', 'Delete this palette', palIndex === 0);
     sel.value = palIndex;
     syncUI();
+    placeLayers();                               // more or fewer swatches can change the toolbar's height
   }
   $('palSel').onchange = e => {
     const v = e.target.value;
@@ -735,9 +858,129 @@
   addEventListener('drop', e => { e.preventDefault(); importFile(e.dataTransfer.files[0]); });
   $('undo').onclick = undo;
   $('redo').onclick = redo;
-  $('clear').onclick = () => { if (strokes.length) { const prev = strokes; strokes = []; commit({ type: 'clear', prev }); } };
+  $('clear').onclick = () => { if (strokes.length) layerOp(() => { strokes = []; }); };
   $('home').onclick = () => { homeView(); save(); redraw(); };
   $('width').oninput = e => { width = +e.target.value; };
+
+  // ---------- layers panel ----------
+  const UKEY = 'iso-draw-ui';
+  let layersMin = false, dragId = null;
+  try { layersMin = !!JSON.parse(localStorage.getItem(UKEY)).layersMin; } catch (e) {}
+  const layerIndex = id => layers.findIndex(l => l.id === id);
+
+  function selectLayer(id) {
+    if (activeLayer === id) return;
+    activeLayer = id; fillDraft = null; setEraseTarget(null);
+    // Only restyle the rows (no rebuild), so a double-click to rename still lands on the same row.
+    document.querySelectorAll('.layer').forEach(r => r.classList.toggle('active', +r.dataset.id === id));
+    syncUI(); save(); redraw();
+  }
+  function addLayer() {
+    layerOp(() => {
+      const id = Math.max(...layers.map(l => l.id)) + 1;
+      layers.splice(layerIndex(activeLayer) + 1, 0, { id, name: `Layer ${id}`, visible: true });
+      activeLayer = id;
+    });
+  }
+  function deleteLayer(id) {
+    if (layers.length < 2) return;
+    layerOp(() => {
+      const i = layerIndex(id);
+      layers.splice(i, 1);
+      strokes = strokes.filter(st => st.layer !== id);
+      if (activeLayer === id) activeLayer = layers[Math.min(i, layers.length - 1)].id;
+    });
+  }
+  function moveLayer(id, dir) {                  // dir +1 = toward the top
+    const i = layerIndex(id), j = i + dir;
+    if (j < 0 || j >= layers.length) return;
+    layerOp(() => { [layers[i], layers[j]] = [layers[j], layers[i]]; });
+  }
+  function toggleLayer(id) {
+    const l = layers[layerIndex(id)];
+    l.visible = !l.visible;
+    hover = null; pickTarget = null; fillDraft = null; setEraseTarget(null);
+    save(); renderLayers(); redraw();
+  }
+  function renameLayer(id, span) {
+    const input = document.createElement('input');
+    input.value = layers[layerIndex(id)].name; input.maxLength = 40;
+    span.replaceWith(input); input.focus(); input.select();
+    let done = false;
+    const finish = keep => {
+      if (done) return; done = true;
+      const v = input.value.trim(), l = layers[layerIndex(id)];
+      if (keep && v && l && v !== l.name) layerOp(() => { layers[layerIndex(id)].name = v; });
+      else renderLayers();
+    };
+    input.onkeydown = e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); };
+    input.onblur = () => finish(true);
+    input.onclick = e => e.stopPropagation();
+  }
+
+  // The panel sits just under the toolbar, however many rows the toolbar wraps to.
+  function placeLayers() {
+    document.getElementById('layers').style.top = document.getElementById('bar').getBoundingClientRect().bottom + 10 + 'px';
+  }
+  function renderLayers() {
+    $('layers').classList.toggle('min', layersMin);
+    const mb = $('layersMin');
+    mb.innerHTML = svg(layersMin ? 'expand' : 'collapse');
+    mb.title = layersMin ? 'Show the layers panel' : 'Minimise the layers panel';
+    mb.setAttribute('aria-label', mb.title);
+    const list = $('layerList'); list.textContent = '';
+    for (let n = layers.length - 1; n >= 0; n--) {          // top layer first, like a stack
+      const l = layers[n];
+      const row = document.createElement('div');
+      row.className = 'layer' + (l.id === activeLayer ? ' active' : '') + (l.visible ? '' : ' off');
+      row.dataset.id = l.id; row.draggable = true;
+      row.title = 'Click to draw on this layer · double-click the name to rename · drag to reorder';
+      const btn = (icon, title, fn, disabled) => {
+        const b = document.createElement('button');
+        b.innerHTML = svg(icon); b.title = title; b.setAttribute('aria-label', title); b.disabled = !!disabled;
+        b.onclick = e => { e.stopPropagation(); fn(); };
+        row.appendChild(b);
+      };
+      btn(l.visible ? 'eye' : 'eyeOff', l.visible ? 'Hide this layer' : 'Show this layer', () => toggleLayer(l.id));
+      const name = document.createElement('span');
+      name.className = 'name'; name.textContent = l.name;
+      name.ondblclick = () => renameLayer(l.id, name);
+      row.appendChild(name);
+      btn('up', 'Move layer up', () => moveLayer(l.id, 1), n === layers.length - 1);
+      btn('down', 'Move layer down', () => moveLayer(l.id, -1), n === 0);
+      btn('x', 'Delete this layer and everything on it (undoable)', () => deleteLayer(l.id), layers.length === 1);
+      row.onclick = () => selectLayer(l.id);
+
+      const dropAbove = e => { const r = row.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; };
+      const clearMarks = () => row.classList.remove('dropAbove', 'dropBelow');
+      row.ondragstart = e => { dragId = l.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(l.id)); };
+      row.ondragend = () => { dragId = null; };
+      row.ondragleave = clearMarks;
+      row.ondragover = e => {
+        if (dragId == null || dragId === l.id) return;
+        e.preventDefault(); e.stopPropagation();
+        const above = dropAbove(e);
+        row.classList.toggle('dropAbove', above); row.classList.toggle('dropBelow', !above);
+      };
+      row.ondrop = e => {
+        e.preventDefault(); e.stopPropagation(); clearMarks();
+        const id = dragId, above = dropAbove(e); dragId = null;
+        if (id == null || id === l.id) return;
+        layerOp(() => {
+          const moved = layers.splice(layerIndex(id), 1)[0];
+          layers.splice(layerIndex(l.id) + (above ? 1 : 0), 0, moved);   // "above" on screen = later in the stack
+        });
+      };
+      list.appendChild(row);
+    }
+  }
+  $('addLayer').innerHTML = svg('plus') + '<span>New layer</span>';
+  $('addLayer').onclick = addLayer;
+  $('layersMin').onclick = () => {
+    layersMin = !layersMin;
+    try { localStorage.setItem(UKEY, JSON.stringify({ layersMin })); } catch (e) {}
+    renderLayers();
+  };
 
   function setTheme(d, remember = true) {
     dark = d;
@@ -751,6 +994,7 @@
   W = innerWidth; H = innerHeight;
   if (!load()) homeView();
   syncUI();
+  renderLayers();
   resize();
 })();
 </script>
