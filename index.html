@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Iso Draw</title>
+<style>
+  :root {
+    --bg: #f6f3ec; --panel: #fffdf8; --text: #2b2a27; --muted: #8a867c;
+    --border: #ddd7c9; --accent: #2f6fde;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181b; --panel: #222428; --text: #e8e6e1; --muted: #8d9097;
+      --border: #34373d; --accent: #6ea3ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg);
+    font: 13px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--text); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+  canvas.pan { cursor: grab; }
+  canvas.erase { cursor: default; }
+  canvas.erase.hit { cursor: pointer; }
+  canvas.panning, canvas.erase.panning { cursor: grabbing; }
+  #bar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.12); user-select: none; max-width: calc(100vw - 24px); flex-wrap: wrap; }
+  #bar button { font: inherit; color: var(--text); background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  #bar button:hover { background: rgba(127,127,127,.14); }
+  #bar button.on { background: var(--accent); color: #fff; }
+  #bar button:disabled { opacity: .35; cursor: default; background: transparent; }
+  .sep { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
+  .sw { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--panel);
+    outline: 1px solid var(--border); cursor: pointer; padding: 0 !important; }
+  .sw.on { outline: 2px solid var(--accent); }
+  #width { width: 70px; accent-color: var(--accent); }
+  #hud { position: fixed; left: 12px; bottom: 10px; color: var(--muted); pointer-events: none;
+    font-variant-numeric: tabular-nums; }
+  #help { position: fixed; right: 12px; bottom: 10px; color: var(--muted); pointer-events: none; text-align: right; }
+  @media (max-width: 720px) { #help { display: none; } }
+  #toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); max-width: calc(100vw - 32px);
+    background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  #palSel { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 6px; max-width: 130px; cursor: pointer; }
+  dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 14px;
+    background: var(--panel); color: var(--text); padding: 18px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h3 { margin: 0 0 12px; font-size: 16px; }
+  dialog label { display: block; margin-bottom: 10px; color: var(--muted); }
+  dialog input:not([type=color]), dialog textarea { display: block; width: 100%; margin-top: 4px; font: inherit;
+    color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 8px; resize: vertical; }
+  dialog .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  dialog .grow { flex: 1; }
+  dialog button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  dialog input[type=color] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 8px; background: none; }
+  #palChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; min-height: 30px; }
+  #palChips button { width: 30px; height: 30px; padding: 0; border-radius: 8px; }
+  #palChips button:hover { outline: 2px solid #e5484d; }
+  #palMsg { color: var(--muted); margin-top: 8px; min-height: 17px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="bar">
+  <button id="tLine" title="Straight line (L)">Line</button>
+  <button id="tFree" title="Freehand, ends snap (F)">Freehand</button>
+  <button id="tFill" title="Fill area: click points for the boundary, then click the first point again or press Enter (B)">Fill</button>
+  <button id="tErase"title="Eraser: click or drag over strokes to remove them (E)">Eraser</button>
+  <div class="sep"></div>
+  <span id="swatches" style="display:flex;gap:5px;flex-wrap:wrap;max-width:260px"></span>
+  <select id="palSel" title="Colour palettes: switch, create, import, edit"></select>
+  <input id="width" type="range" min="1" max="12" step="0.5" value="2.5" title="Line width">
+  <div class="sep"></div>
+  <button id="undo" title="Undo (⌘Z)">Undo</button>
+  <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
+  <button id="clear" title="Clear everything (undoable)">Clear</button>
+  <div class="sep"></div>
+  <button id="grid" title="Show / hide grid points (G)">Grid</button>
+  <button id="home" title="Reset view (0)">Reset view</button>
+  <div class="sep"></div>
+  <button id="save" title="Save drawing to a file (⌘S)">Save</button>
+  <button id="import" title="Import a saved drawing; replaces the current one, undoable (⌘O)">Import</button>
+  <input id="file" type="file" accept=".json,application/json" hidden>
+</div>
+<div id="hud"></div>
+<div id="toast"></div>
+
+<dialog id="palDlg">
+  <h3 id="palTitle">New palette</h3>
+  <label>Name
+    <input id="palName" maxlength="40">
+  </label>
+  <label>Import: paste a Coolors link, or any text containing hex colours
+    <textarea id="palPaste" rows="3" placeholder="https://coolors.co/264653-2a9d8f-e9c46a-f4a261-e76f51"></textarea>
+  </label>
+  <div class="row">
+    <button type="button" id="palParse">Add pasted colours</button>
+    <span class="grow"></span>
+    <input type="color" id="palPick" value="#2f6fde" title="Pick a colour">
+    <button type="button" id="palAdd">Add picked colour</button>
+  </div>
+  <div id="palChips"></div>
+  <div id="palMsg"></div>
+  <div class="row">
+    <span class="grow"></span>
+    <button type="button" id="palCancel">Cancel</button>
+    <button type="button" id="palOk" class="primary">Save palette</button>
+  </div>
+</dialog>
+<div id="help">scroll / pinch = zoom · space-drag or right-drag = pan</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const hud = document.getElementById('hud');
+
+  // ---------- grid math ----------
+  // Isometric lattice with basis u = s*(√3/2, 1/2), v = s*(0, 1).
+  // Spacing s is always a power of two, so every coarser level's points are
+  // a subset of every finer level's: things you snapped to never disappear
+  // from the lattice when you zoom in.
+  const C = Math.sqrt(3) / 2;
+  const MIN_PX = 22;                 // on-screen spacing stays in [22, 44) px
+  const MIN_SCALE = 2 ** -20, MAX_SCALE = 2 ** 20;
+
+  let scale = 1;                     // screen px per world unit
+  let camX = 0, camY = 0;            // world coords of the screen's top-left
+  let W = 0, H = 0, dpr = 1;
+
+  const spacing = () => 2 ** Math.ceil(Math.log2(MIN_PX / scale));
+  const toWorld = (sx, sy) => [camX + sx / scale, camY + sy / scale];
+  const toScreen = (wx, wy) => [(wx - camX) * scale, (wy - camY) * scale];
+
+  function snap(wx, wy) {
+    const s = spacing();
+    const i0 = Math.floor(wx / (C * s));
+    let best = null, bd = Infinity;
+    for (let i = i0; i <= i0 + 1; i++) {
+      const j0 = Math.floor(wy / s - i / 2);
+      for (let j = j0; j <= j0 + 1; j++) {
+        const x = i * C * s, y = (i / 2 + j) * s;
+        const d = (x - wx) ** 2 + (y - wy) ** 2;
+        if (d < bd) { bd = d; best = [x, y]; }
+      }
+    }
+    return best;
+  }
+
+  // ---------- state ----------
+  const COLORS = ['ink', '#e5484d', '#f2992e', '#2fa36b', '#2f6fde', '#8e4ec6'];
+  let tool = 'line', color = 'ink', width = 2.5;
+  let strokes = [];                  // {tool, color, w, pts:[[x,y],...]} in world coords
+  let undoStack = [], redoStack = [];
+  let draft = null;                  // stroke being drawn
+  let hover = null;                  // snapped world point under cursor
+  let eraseTarget = null;            // stroke the eraser would remove
+  let fillDraft = null;              // fill polygon being outlined, point by point
+  let showGrid = true;
+  let dark = matchMedia('(prefers-color-scheme: dark)').matches;
+
+  const KEY = 'iso-draw-v1';
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ strokes, scale, camX, camY, showGrid })); } catch (e) {}
+  }
+  function load() {
+    try {
+      const d = JSON.parse(localStorage.getItem(KEY));
+      if (d && Array.isArray(d.strokes)) { strokes = d.strokes; scale = d.scale; camX = d.camX; camY = d.camY; showGrid = d.showGrid !== false; return true; }
+    } catch (e) {}
+    return false;
+  }
+  function homeView() { scale = 1; camX = -W / 2; camY = -H / 2; }
+
+  // ---------- rendering ----------
+  let queued = false;
+  function redraw() { if (!queued) { queued = true; requestAnimationFrame(draw); } }
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = innerWidth; H = innerHeight;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    redraw();
+  }
+
+  function buildGrid() {
+    const s = spacing();
+    const fade = s * scale / MIN_PX - 1;         // 0 → finest level just appeared, 1 → about to subdivide
+    const [x0, y0] = toWorld(0, 0), [x1, y1] = toWorld(W, H);
+    const tiers = [new Path2D(), new Path2D(), new Path2D()];
+    const radii = [1.1, 1.5, 2.1];
+    const iA = Math.ceil(x0 / (C * s)), iB = Math.floor(x1 / (C * s));
+    for (let i = iA; i <= iB; i++) {
+      const jA = Math.ceil(y0 / s - i / 2), jB = Math.floor(y1 / s - i / 2);
+      const sx = (i * C * s - camX) * scale;
+      for (let j = jA; j <= jB; j++) {
+        const sy = ((i / 2 + j) * s - camY) * scale;
+        const t = (i % 4 === 0 && j % 4 === 0) ? 2 : (i % 2 === 0 && j % 2 === 0) ? 1 : 0;
+        tiers[t].moveTo(sx + radii[t], sy);
+        tiers[t].arc(sx, sy, radii[t], 0, 6.2832);
+      }
+    }
+    // Each tier eases toward the look of the tier above it as you zoom in,
+    // so the subdivision is seamless.
+    const a0 = 0.34 * Math.min(1, fade * 2.5), a1 = 0.34 + 0.16 * fade, a2 = 0.50 + 0.15 * fade;
+    return { tiers, alphas: [a0, a1, a2] };
+  }
+  function paintGrid(g, rgb, boost) {
+    g.alphas.forEach((a, t) => { ctx.fillStyle = `rgba(${rgb},${Math.min(0.9, a * boost)})`; ctx.fill(g.tiers[t]); });
+  }
+  // Dot colour that stays visible on top of a given fill colour.
+  function dotRgbOn(c) {
+    const n = parseInt(inkColor(c).slice(1), 16);
+    const lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+    return lum > 0.55 ? '20,18,14' : '255,255,255';
+  }
+  function polyPath(pts) {
+    const path = new Path2D();
+    pts.forEach((p, k) => { const [x, y] = toScreen(p[0], p[1]); k ? path.lineTo(x, y) : path.moveTo(x, y); });
+    path.closePath();
+    return path;
+  }
+
+  const inkColor = c => c === 'ink' ? (dark ? '#f1efe9' : '#23211d') : c;
+
+  function drawStroke(st, colorOverride, widthOverride) {
+    const p = st.pts;
+    if (p.length < 2) return;
+    ctx.strokeStyle = colorOverride || inkColor(st.color);
+    ctx.lineWidth = widthOverride || st.w;
+    ctx.beginPath();
+    let [x, y] = toScreen(p[0][0], p[0][1]);
+    ctx.moveTo(x, y);
+    if (p.length === 2) {
+      [x, y] = toScreen(p[1][0], p[1][1]); ctx.lineTo(x, y);
+    } else {
+      for (let k = 1; k < p.length - 1; k++) {
+        const [ax, ay] = toScreen(p[k][0], p[k][1]);
+        const [bx, by] = toScreen(p[k + 1][0], p[k + 1][1]);
+        ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
+      }
+      [x, y] = toScreen(p[p.length - 1][0], p[p.length - 1][1]); ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  function draw() {
+    queued = false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg');
+    ctx.fillRect(0, 0, W, H);
+    const grid = buildGrid();
+    if (showGrid) paintGrid(grid, dark ? '255,255,255' : '40,36,28', 1);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // Layer order: fills, then grid dots re-drawn on top of each fill in a
+    // contrasting colour (so they show through), then lines above everything.
+    for (const st of strokes) {
+      if (st.tool !== 'fill') continue;
+      const path = polyPath(st.pts);
+      ctx.fillStyle = inkColor(st.color); ctx.fill(path);
+      if (showGrid) { ctx.save(); ctx.clip(path); paintGrid(grid, dotRgbOn(st.color), 1.6); ctx.restore(); }
+    }
+    if (fillDraft) {
+      const pts = hover ? [...fillDraft.pts, hover] : fillDraft.pts;
+      const path = polyPath(pts);
+      ctx.globalAlpha = 0.4; ctx.fillStyle = inkColor(fillDraft.color); ctx.fill(path);
+      ctx.globalAlpha = 1; ctx.strokeStyle = inkColor(fillDraft.color); ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]); ctx.stroke(path); ctx.setLineDash([]);
+    }
+    for (const st of strokes) if (st.tool !== 'fill') drawStroke(st);
+    if (draft) drawStroke(draft);
+    if (eraseTarget && eraseTarget.tool === 'fill') {
+      const path = polyPath(eraseTarget.pts);
+      ctx.fillStyle = 'rgba(229,72,77,0.55)'; ctx.fill(path);
+      ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 2.5; ctx.stroke(path);
+    } else if (eraseTarget) {                    // red halo + red stroke = "this will be deleted"
+      drawStroke(eraseTarget, 'rgba(229,72,77,0.32)', eraseTarget.w + 12);
+      drawStroke(eraseTarget, '#e5484d');
+    }
+
+    const accent = dark ? '#6ea3ff' : '#2f6fde';
+    const ring = (pt, r) => {
+      const [x, y] = toScreen(pt[0], pt[1]);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832);
+      ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
+    };
+    if (draft) ring(draft.pts[0], 5);
+    if (fillDraft) fillDraft.pts.forEach((p, k) => ring(p, k === 0 && fillDraft.pts.length >= 3 ? 9 : 4));
+    if (hover) ring(hover, 7);
+
+    const z = scale >= 1 ? scale : 1 / scale;
+    const zs = (z >= 100 ? Math.round(z).toLocaleString() : z.toPrecision(3)) + '×';
+    hud.textContent = `zoom ${scale >= 1 ? zs : '1/' + zs} · grid 2^${Math.log2(spacing())} · ${strokes.length} stroke${strokes.length === 1 ? '' : 's'}`;
+  }
+
+  // ---------- history ----------
+  function commit(action) { undoStack.push(action); redoStack = []; syncUI(); save(); redraw(); }
+  function undo() {
+    if (fillDraft) {                             // mid-outline: step back one point
+      fillDraft.pts.pop();
+      if (!fillDraft.pts.length) fillDraft = null;
+      syncUI(); redraw(); return;
+    }
+    const a = undoStack.pop(); if (!a) return;
+    if (a.type === 'add') strokes.pop();
+    else if (a.type === 'remove') strokes.splice(a.index, 0, a.stroke);
+    else strokes = a.prev;
+    eraseTarget = null;
+    redoStack.push(a); syncUI(); save(); redraw();
+  }
+  function redo() {
+    const a = redoStack.pop(); if (!a) return;
+    if (a.type === 'add') strokes.push(a.stroke);
+    else if (a.type === 'remove') strokes.splice(a.index, 1);
+    else strokes = a.next || [];                 // 'clear' has no next; 'replace' (import) does
+    eraseTarget = null;
+    undoStack.push(a); syncUI(); save(); redraw();
+  }
+
+  // ---------- save / import ----------
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+  function exportFile() {
+    const data = { app: 'iso-draw', version: 1, view: { scale, camX, camY }, showGrid, strokes };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `iso-draw-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  // Keep only well-formed strokes, so a damaged or hand-edited file can't break drawing.
+  function cleanStrokes(list) {
+    if (!Array.isArray(list)) return null;
+    const ok = [];
+    for (const s of list) {
+      if (!s || !['line', 'free', 'fill'].includes(s.tool) || !Array.isArray(s.pts)) continue;
+      const pts = s.pts.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+                       .map(p => [p[0], p[1]]);
+      if (pts.length < (s.tool === 'fill' ? 3 : 2)) continue;
+      const col = s.color === 'ink' || /^#[0-9a-f]{6}$/i.test(s.color) ? s.color : 'ink';
+      const w = Number.isFinite(s.w) ? Math.min(40, Math.max(0.5, s.w)) : 2.5;
+      ok.push({ tool: s.tool, color: col, w, pts });
+    }
+    return ok;
+  }
+  async function importFile(file) {
+    if (!file) return;
+    let data = null;
+    try { data = JSON.parse(await file.text()); } catch (e) {}
+    const next = data && data.app === 'iso-draw' ? cleanStrokes(data.strokes) : null;
+    if (!next) { toast(`Couldn't import "${file.name}": it isn't a saved Iso Draw drawing.`); return; }
+    const prev = strokes;
+    strokes = next; draft = null; fillDraft = null; hover = null; setEraseTarget(null);
+    const v = data.view;
+    if (v && [v.scale, v.camX, v.camY].every(Number.isFinite) && v.scale > 0) {
+      scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale)); camX = v.camX; camY = v.camY;
+    } else homeView();
+    if (typeof data.showGrid === 'boolean') showGrid = data.showGrid;
+    commit({ type: 'replace', prev, next });
+    const skipped = data.strokes.length - next.length;
+    toast(`Imported ${next.length} stroke${next.length === 1 ? '' : 's'} from "${file.name}"` +
+          (skipped ? ` (${skipped} unreadable skipped)` : '') + '. Undo brings back the previous drawing.');
+  }
+
+  // ---------- eraser ----------
+  // Topmost stroke within a few screen pixels of (sx, sy), or null.
+  function strokeAt(sx, sy) {
+    // Lines are drawn above fills, so they get first pick.
+    for (let n = strokes.length - 1; n >= 0; n--) {
+      const st = strokes[n], p = st.pts, tol = st.w / 2 + 6;
+      if (st.tool === 'fill') continue;
+      let [ax, ay] = toScreen(p[0][0], p[0][1]);
+      for (let k = 1; k < p.length; k++) {
+        const [bx, by] = toScreen(p[k][0], p[k][1]);
+        const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+        const t = len2 ? Math.max(0, Math.min(1, ((sx - ax) * dx + (sy - ay) * dy) / len2)) : 0;
+        if (Math.hypot(sx - ax - t * dx, sy - ay - t * dy) <= tol) return st;
+        ax = bx; ay = by;
+      }
+    }
+    const [wx, wy] = toWorld(sx, sy);
+    for (let n = strokes.length - 1; n >= 0; n--) {
+      const st = strokes[n], p = st.pts;
+      if (st.tool !== 'fill') continue;
+      let inside = false;
+      for (let k = 0, j = p.length - 1; k < p.length; j = k++) {
+        if ((p[k][1] > wy) !== (p[j][1] > wy) &&
+            wx < (p[j][0] - p[k][0]) * (wy - p[k][1]) / (p[j][1] - p[k][1]) + p[k][0]) inside = !inside;
+      }
+      if (inside) return st;
+    }
+    return null;
+  }
+
+  // ---------- fill ----------
+  const samePt = (a, b) => a[0] === b[0] && a[1] === b[1];
+  function fillClick(pt) {
+    if (!fillDraft) { fillDraft = { tool: 'fill', color, pts: [pt] }; syncUI(); return; }
+    const p = fillDraft.pts;
+    if (samePt(pt, p[0]) || samePt(pt, p[p.length - 1])) { if (p.length >= 3) finishFill(); }
+    else p.push(pt);
+  }
+  function finishFill() {
+    if (!fillDraft || fillDraft.pts.length < 3) return;
+    const st = fillDraft; fillDraft = null;
+    strokes.push(st); commit({ type: 'add', stroke: st });
+  }
+  function setEraseTarget(st) {
+    eraseTarget = st;
+    canvas.classList.toggle('hit', !!st);
+  }
+  function eraseAt(sx, sy) {
+    const st = strokeAt(sx, sy);
+    setEraseTarget(null);
+    if (!st) return;
+    const index = strokes.indexOf(st);
+    strokes.splice(index, 1);
+    commit({ type: 'remove', stroke: st, index });
+  }
+
+  // ---------- input ----------
+  const pointers = new Map();
+  let mode = null;                   // 'draw' | 'pan' | 'pinch'
+  let last = null, pinch = null, spaceDown = false;
+
+  function zoomAt(sx, sy, factor) {
+    const [wx, wy] = toWorld(sx, sy);
+    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale * factor));
+    camX = wx - sx / scale; camY = wy - sy / scale;
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pointers.size === 2) {                       // second finger: abandon stroke, start pinch
+      draft = null; hover = null; setEraseTarget(null); mode = 'pinch';
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2 };
+    } else if (e.button === 1 || e.button === 2 || spaceDown) {
+      mode = 'pan'; last = [e.clientX, e.clientY]; canvas.classList.add('panning');
+      setEraseTarget(null);
+    } else if (e.button === 0 && tool === 'erase') {
+      mode = 'erase'; eraseAt(e.clientX, e.clientY);   // keep dragging to erase more
+    } else if (e.button === 0 && tool === 'fill') {
+      hover = snap(...toWorld(e.clientX, e.clientY));
+      fillClick(hover);
+    } else if (e.button === 0) {
+      mode = 'draw';
+      const start = snap(...toWorld(e.clientX, e.clientY));
+      draft = { tool, color, w: width, pts: [start, start] };
+    }
+    redraw();
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, [e.clientX, e.clientY]);
+    const w = toWorld(e.clientX, e.clientY);
+    if (mode === 'pinch' && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
+      camX -= (cx - pinch.cx) / scale; camY -= (cy - pinch.cy) / scale;
+      if (pinch.d > 0) zoomAt(cx, cy, d / pinch.d);
+      pinch = { d, cx, cy };
+    } else if (mode === 'pan') {
+      camX -= (e.clientX - last[0]) / scale; camY -= (e.clientY - last[1]) / scale;
+      last = [e.clientX, e.clientY];
+    } else if (mode === 'draw' && draft) {
+      hover = snap(w[0], w[1]);
+      if (draft.tool === 'line') draft.pts[1] = hover;
+      else {
+        const p = draft.pts, q = p[p.length - 1];
+        if (Math.hypot(w[0] - q[0], w[1] - q[1]) * scale > 2) p.push(w);
+      }
+    } else if (mode === 'erase') {
+      eraseAt(e.clientX, e.clientY);
+    } else if (!mode) {
+      if (tool === 'erase') setEraseTarget(spaceDown ? null : strokeAt(e.clientX, e.clientY));
+      else hover = spaceDown ? null : snap(w[0], w[1]);
+    }
+    redraw();
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (mode === 'draw' && draft) {
+      const end = snap(...toWorld(e.clientX, e.clientY));
+      const p = draft.pts;
+      if (draft.tool === 'line') p[1] = end; else p.push(end);
+      const moved = p.length > 2 || p[0][0] !== end[0] || p[0][1] !== end[1];
+      const st = draft; draft = null;
+      if (moved && e.type === 'pointerup') { strokes.push(st); commit({ type: 'add', stroke: st }); }
+    }
+    if (pointers.size === 0) { mode = null; canvas.classList.remove('panning'); save(); }
+    else if (mode === 'pinch' && pointers.size < 2) mode = 'idle-after-pinch';
+    redraw();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', () => { if (!mode) { hover = null; setEraseTarget(null); redraw(); } });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  let saveTimer;
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const dy = Math.max(-80, Math.min(80, e.deltaY * (e.deltaMode === 1 ? 16 : 1)));
+    zoomAt(e.clientX, e.clientY, Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0025)));
+    const w = toWorld(e.clientX, e.clientY);
+    if (mode === 'draw' && draft && draft.tool === 'line') { hover = snap(w[0], w[1]); draft.pts[1] = hover; }
+    else if (!mode && tool === 'erase') setEraseTarget(strokeAt(e.clientX, e.clientY));
+    else if (!mode) hover = snap(w[0], w[1]);
+    clearTimeout(saveTimer); saveTimer = setTimeout(save, 300);
+    redraw();
+  }, { passive: false });
+
+  addEventListener('keydown', e => {
+    // Typing in a field or the palette dialog must not trigger tool shortcuts.
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && e.target.type !== 'range' || document.getElementById('palDlg').open) return;
+    if (e.code === 'Space') { spaceDown = true; hover = null; setEraseTarget(null); canvas.classList.add('pan'); redraw(); e.preventDefault(); return; }
+    const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+    if (mod && k === 's') { exportFile(); e.preventDefault(); }
+    else if (mod && k === 'o') { $('file').click(); e.preventDefault(); }
+    else if (mod && k === 'z') { e.shiftKey ? redo() : undo(); e.preventDefault(); }
+    else if (mod && k === 'y') { redo(); e.preventDefault(); }
+    else if (!mod && k === 'l') setTool('line');
+    else if (!mod && k === 'f') setTool('free');
+    else if (!mod && k === 'e') setTool('erase');
+    else if (!mod && k === 'b') setTool('fill');
+    else if (!mod && k === 'g') toggleGrid();
+    else if (fillDraft && k === 'enter') finishFill();
+    else if (fillDraft && k === 'escape') { fillDraft = null; syncUI(); redraw(); }
+    else if (fillDraft && k === 'backspace') { undo(); e.preventDefault(); }
+    else if (!mod && k === '0') { homeView(); save(); redraw(); }
+  });
+  addEventListener('keyup', e => { if (e.code === 'Space') { spaceDown = false; canvas.classList.remove('pan'); } });
+
+  // ---------- toolbar ----------
+  const $ = id => document.getElementById(id);
+  function setTool(t) {
+    tool = t; hover = null; fillDraft = null; setEraseTarget(null);
+    canvas.classList.toggle('erase', t === 'erase');
+    syncUI(); redraw();
+  }
+  function toggleGrid() { showGrid = !showGrid; syncUI(); save(); redraw(); }
+  function syncUI() {
+    $('tLine').classList.toggle('on', tool === 'line');
+    $('tFree').classList.toggle('on', tool === 'free');
+    $('tErase').classList.toggle('on', tool === 'erase');
+    $('tFill').classList.toggle('on', tool === 'fill');
+    $('grid').classList.toggle('on', showGrid);
+    $('undo').disabled = !undoStack.length && !fillDraft;
+    $('redo').disabled = !redoStack.length;
+    $('clear').disabled = !strokes.length;
+    document.querySelectorAll('.sw').forEach(b => {
+      b.classList.toggle('on', b.dataset.c === color);
+      b.style.background = inkColor(b.dataset.c);
+    });
+  }
+  // ---------- palettes ----------
+  // palettes[0] is the built-in default; the rest are the user's and are kept
+  // in this browser. Strokes store their own colour, so drawings never depend
+  // on a palette still existing.
+  const PKEY = 'iso-draw-palettes-v1', MAX_COLORS = 24;
+  const palettes = [{ name: 'Default', colors: COLORS }];
+  let palIndex = 0;
+  try {
+    const d = JSON.parse(localStorage.getItem(PKEY));
+    for (const p of (d && d.custom) || []) {
+      const cols = (Array.isArray(p.colors) ? p.colors : []).filter(c => /^#[0-9a-f]{6}$/.test(c)).slice(0, MAX_COLORS);
+      if (cols.length) palettes.push({ name: String(p.name || 'Palette').slice(0, 40), colors: cols });
+    }
+    if (d && palettes[d.current]) palIndex = d.current;
+  } catch (e) {}
+  function savePalettes() {
+    try { localStorage.setItem(PKEY, JSON.stringify({ custom: palettes.slice(1), current: palIndex })); } catch (e) {}
+  }
+
+  // Pull hex colours out of anything: a Coolors link (…/264653-2a9d8f-…),
+  // a Coolors CSS/code export, or a plain list. '#'-prefixed codes win if
+  // present; otherwise bare six-digit codes are used.
+  function parseColors(text) {
+    let m = text.match(/#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3})\b/gi);
+    if (m) m = m.map(h => { h = h.slice(1); if (h.length === 3) h = h.replace(/./g, '$&$&'); return h.slice(0, 6); });
+    else {
+      // Bare codes. An all-letter one ("ffffff") only counts when the text clearly
+      // is a colour list (a hyphen-joined Coolors run, or some code with a digit, or
+      // nothing but that code), so a stray word like "facade" isn't taken for a colour.
+      const runs = text.match(/\b[0-9a-f]{6}(?:-[0-9a-f]{6})*\b/gi) || [];
+      const sure = r => r.includes('-') || /\d/.test(r) || r === text.trim();
+      m = runs.some(sure) ? runs.flatMap(r => r.split('-')) : [];
+    }
+    return [...new Set(m.map(h => '#' + h.toLowerCase()))];
+  }
+
+  function renderPalettes() {
+    const pal = palettes[palIndex];
+    if (!pal.colors.includes(color)) color = pal.colors[0];
+    const box = $('swatches'); box.textContent = '';
+    pal.colors.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'sw'; b.dataset.c = c; b.title = c === 'ink' ? 'Ink' : c;
+      b.onclick = () => { color = c; syncUI(); };
+      box.appendChild(b);
+    });
+    const sel = $('palSel'); sel.textContent = '';
+    const opt = (value, label, disabled) => {
+      const o = document.createElement('option');
+      o.value = value; o.textContent = label; o.disabled = !!disabled; sel.appendChild(o);
+    };
+    palettes.forEach((p, n) => opt(n, p.name));
+    opt('', '──────────', true);
+    opt('new', 'New / import palette…');
+    opt('edit', 'Edit this palette…', palIndex === 0);
+    opt('del', 'Delete this palette', palIndex === 0);
+    sel.value = palIndex;
+    syncUI();
+  }
+  $('palSel').onchange = e => {
+    const v = e.target.value;
+    if (v === 'new') openPalDlg(-1);
+    else if (v === 'edit') openPalDlg(palIndex);
+    else if (v === 'del') {
+      if (confirm(`Delete the palette "${palettes[palIndex].name}"? Drawings keep their colours.`)) {
+        palettes.splice(palIndex, 1); palIndex = 0; savePalettes();
+      }
+    } else { palIndex = +v; savePalettes(); }
+    renderPalettes();
+  };
+
+  let dlgColors = [], dlgEdit = -1;
+  const palMsg = t => { $('palMsg').textContent = t; };
+  function renderChips() {
+    const box = $('palChips'); box.textContent = '';
+    dlgColors.forEach((c, n) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.style.background = c; b.title = `${c} (click to remove)`;
+      b.onclick = () => { dlgColors.splice(n, 1); renderChips(); };
+      box.appendChild(b);
+    });
+  }
+  function openPalDlg(idx) {
+    dlgEdit = idx;
+    const p = palettes[idx];
+    dlgColors = p ? [...p.colors] : [];
+    $('palTitle').textContent = p ? 'Edit palette' : 'New palette';
+    $('palName').value = p ? p.name : `Palette ${palettes.length}`;
+    $('palPaste').value = '';
+    palMsg(p ? 'Click a colour to remove it.' : '');
+    renderChips();
+    $('palDlg').showModal();
+  }
+  function addDlgColors(list) {
+    let added = 0;
+    for (const c of list) if (!dlgColors.includes(c) && dlgColors.length < MAX_COLORS) { dlgColors.push(c); added++; }
+    renderChips();
+    return added;
+  }
+  function addPasted() {
+    const found = parseColors($('palPaste').value);
+    if (!found.length) { palMsg('No hex colours found in that text.'); return; }
+    const added = addDlgColors(found);
+    $('palPaste').value = '';
+    palMsg(added ? `Added ${added} colour${added === 1 ? '' : 's'}. Click a colour to remove it.`
+                 : dlgColors.length >= MAX_COLORS ? `A palette holds at most ${MAX_COLORS} colours.` : 'Those colours are already in the palette.');
+  }
+  $('palParse').onclick = addPasted;
+  $('palPaste').addEventListener('paste', () => setTimeout(addPasted, 0));
+  $('palAdd').onclick = () => {
+    if (!addDlgColors([$('palPick').value.toLowerCase()])) palMsg(dlgColors.length >= MAX_COLORS ? `A palette holds at most ${MAX_COLORS} colours.` : 'That colour is already in the palette.');
+  };
+  $('palCancel').onclick = () => $('palDlg').close();
+  $('palOk').onclick = () => {
+    if ($('palPaste').value.trim()) addPasted();          // forgot to press "Add"? count it anyway
+    if (!dlgColors.length) { palMsg('Add at least one colour first.'); return; }
+    const pal = { name: $('palName').value.trim() || 'Palette', colors: dlgColors };
+    if (dlgEdit > 0) palettes[dlgEdit] = pal; else { palettes.push(pal); palIndex = palettes.length - 1; }
+    color = pal.colors[0];
+    savePalettes(); $('palDlg').close(); renderPalettes();
+  };
+  $('palDlg').addEventListener('close', renderPalettes);  // puts the dropdown back on the current palette
+  renderPalettes();
+  $('tLine').onclick = () => setTool('line');
+  $('tFree').onclick = () => setTool('free');
+  $('tErase').onclick = () => setTool('erase');
+  $('tFill').onclick = () => setTool('fill');
+  $('grid').onclick = toggleGrid;
+  $('save').onclick = exportFile;
+  $('import').onclick = () => $('file').click();
+  $('file').onchange = e => { importFile(e.target.files[0]); e.target.value = ''; };
+  // Dropping a saved file anywhere on the page imports it too.
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => { e.preventDefault(); importFile(e.dataTransfer.files[0]); });
+  $('undo').onclick = undo;
+  $('redo').onclick = redo;
+  $('clear').onclick = () => { if (strokes.length) { const prev = strokes; strokes = []; commit({ type: 'clear', prev }); } };
+  $('home').onclick = () => { homeView(); save(); redraw(); };
+  $('width').oninput = e => { width = +e.target.value; };
+
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { dark = e.matches; syncUI(); redraw(); });
+  addEventListener('resize', resize);
+
+  W = innerWidth; H = innerHeight;
+  if (!load()) homeView();
+  syncUI();
+  resize();
+})();
+</script>
+</body>
+</html>
